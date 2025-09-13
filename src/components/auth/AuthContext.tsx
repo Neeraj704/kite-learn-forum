@@ -31,14 +31,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(true); // Start as true
 
-  const checkUserProfile = useCallback(async (user: User) => {
-    if (!user) return;
+  const checkUserProfile = useCallback(async (user: User | null) => {
+    if (!user) {
+      setProfile(null);
+      setProfileLoading(false);
+      return;
+    }
+
     setProfileLoading(true);
 
-    // More robust retry mechanism to handle the delay in profile creation after signup
-    for (let attempt = 1; attempt <= 7; attempt++) {
+    // This retry mechanism handles the delay in profile creation after signup
+    for (let attempt = 0; attempt < 5; attempt++) {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -48,46 +53,40 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (data) {
         setProfile(data);
         setProfileLoading(false);
-        return;
+        return; // Success, exit the function
       }
-      
-      // If the profile is not found, wait with an increasing delay before retrying
-      const delay = attempt * 500; // 500ms, 1000ms, 1500ms...
-      await new Promise(res => setTimeout(res, delay));
+
+      // Wait with an increasing delay before retrying
+      if (attempt < 4) { // Don't wait after the last attempt
+        await new Promise(res => setTimeout(res, 500 * (attempt + 1)));
+      }
     }
     
     // If profile is still not found after all retries
+    console.error("User profile could not be found after multiple attempts.");
     setProfile(null);
     setProfileLoading(false);
-    console.error("User profile not found after multiple attempts. This might indicate an issue with the on-signup trigger.");
-
   }, []);
 
   useEffect(() => {
     setLoading(true);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+        setSession(session);
+        const currentUser = session?.user ?? null;
+        setUser(currentUser);
+        checkUserProfile(currentUser).finally(() => {
+          setLoading(false);
+        });
+    });
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setSession(session);
         const currentUser = session?.user ?? null;
         setUser(currentUser);
-        if (currentUser) {
-            checkUserProfile(currentUser);
-        } else {
-            setProfile(null);
-        }
-        setLoading(false);
+        checkUserProfile(currentUser);
       }
     );
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-        setSession(session);
-        const currentUser = session?.user ?? null;
-        setUser(currentUser);
-        if (currentUser) {
-            checkUserProfile(currentUser);
-        }
-        setLoading(false);
-    });
 
     return () => subscription.unsubscribe();
   }, [checkUserProfile]);
@@ -110,17 +109,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
-    
-    return { error };
+    return await supabase.auth.signInWithPassword({ email, password });
   };
 
   const signOut = async () => {
     await supabase.auth.signOut();
     setProfile(null);
+    setUser(null);
+    setSession(null);
   };
 
   return (
@@ -134,7 +130,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       signIn,
       signOut
     }}>
-      {children}
+      {!loading && children}
     </AuthContext.Provider>
   );
 };

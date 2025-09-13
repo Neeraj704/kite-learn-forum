@@ -4,20 +4,20 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 
-import Navigation from "../components/layout/Navigation";
-import Footer from "../components/layout/Footer";
-import { Button } from "../components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { Input } from "../components/ui/input";
-import { Textarea } from "../components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "../components/ui/form";
-import { Alert, AlertDescription } from "../components/ui/alert";
+import Navigation from "@/components/layout/Navigation";
+import Footer from "@/components/layout/Footer";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ArrowLeft, Loader2, AlertCircle } from "lucide-react";
 
-import { useAuth } from "../components/auth/AuthContext";
-import { supabase } from "../integrations/supabase/client";
-import { toast } from "../components/ui/use-toast";
+import { useAuth } from "@/components/auth/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/components/ui/use-toast";
 
 const topicSchema = z.object({
   title: z.string().min(5, "Title must be at least 5 characters").max(100),
@@ -42,13 +42,15 @@ const NewTopic = () => {
   });
 
   useEffect(() => {
-    // Redirect if auth is still loading or user is not logged in
     if (!profileLoading && !user) {
+      toast({
+        variant: "destructive",
+        title: "Authentication required",
+        description: "You need to be signed in to create a topic.",
+      });
       navigate("/auth");
-      return;
     }
-    
-    // Fetch categories for the select dropdown
+
     const fetchCategories = async () => {
       const { data, error } = await supabase.from("categories").select("id, name");
       if (data) {
@@ -56,27 +58,36 @@ const NewTopic = () => {
       }
     };
 
-    if(user) {
-        fetchCategories();
+    if (user) {
+      fetchCategories();
     }
-
   }, [user, profileLoading, navigate]);
 
   const onSubmit = async (data: z.infer<typeof topicSchema>) => {
-    if (!user || !profile) {
-      setFormError("You must have a valid profile to create a topic.");
+    // Crucial check: Ensure profile is loaded and exists before submitting.
+    if (!profile) {
+      setFormError("Your user profile is not available. Please try again or sign in again.");
+      toast({
+        variant: "destructive",
+        title: "Profile Error",
+        description: "Could not find your user profile. Please try signing out and back in.",
+      });
       return;
     }
 
     setLoading(true);
     setFormError("");
 
+    // ========================================================================
+    // THE FIX IS HERE: We use `profile.user_id` which is guaranteed to exist
+    // in the profiles table, satisfying the foreign key constraint.
+    // ========================================================================
     const { error } = await supabase.from("topics").insert([
       {
         title: data.title,
         content: data.content,
         category_id: data.categoryId,
-        author_id: user.id,
+        author_id: profile.user_id, // THIS IS THE FIX
       },
     ]);
 
@@ -98,23 +109,22 @@ const NewTopic = () => {
     setLoading(false);
   };
 
-  // Show a loading state for the whole page while the profile is being checked
   if (profileLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="ml-4 text-muted-foreground">Verifying your profile...</span>
       </div>
     );
   }
 
-  // If profile check is done and there's no profile, show an error.
-  if (!profile) {
+  if (!user || !profile) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center text-center p-4">
         <AlertCircle className="h-12 w-12 text-destructive mb-4" />
         <h1 className="text-2xl font-bold mb-2">Profile Error</h1>
-        <p className="text-muted-foreground mb-6">We couldn't load your user profile. Please try signing out and back in.</p>
-        <Button onClick={() => navigate('/auth')}>Go to Sign In</Button>
+        <p className="text-muted-foreground mb-6 max-w-md">We couldn't load your user profile. This can sometimes happen right after signing up. Please try signing out and back in.</p>
+        <Button onClick={() => navigate('/auth')}>Go to Sign In Page</Button>
       </div>
     );
   }
@@ -204,10 +214,7 @@ const NewTopic = () => {
                     </Alert>
                   )}
 
-                  <Button 
-                    type="submit" 
-                    disabled={loading || profileLoading}
-                  >
+                  <Button type="submit" disabled={loading}>
                     {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     {loading ? "Submitting..." : "Submit Topic"}
                   </Button>
