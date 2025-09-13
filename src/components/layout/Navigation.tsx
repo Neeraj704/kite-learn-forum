@@ -1,24 +1,47 @@
 import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Menu, X, Zap } from "lucide-react";
+import { Menu, X, Zap, User, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "../auth/AuthContext";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
 
   const navigation = [
     { name: "Home", href: "/" },
     { name: "Simulation", href: "/game" },
     { name: "Forum", href: "/forum" },
-    { name: "Team", href: "#team" },
+    { name: "Team", href: "/#team" },
   ];
 
   const isActive = (href: string) => {
     if (href === "/") return location.pathname === "/";
     return location.pathname.startsWith(href);
   };
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/");
+  };
+  
+  const getInitials = (email) => {
+    if (!email) return 'U';
+    return email.charAt(0).toUpperCase();
+  }
+
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
@@ -35,9 +58,9 @@ const Navigation = () => {
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-8">
             {navigation.map((item) => (
-              <Link
+               <a
                 key={item.name}
-                to={item.href}
+                href={item.href}
                 className={cn(
                   "text-sm font-medium transition-smooth link-underline",
                   isActive(item.href)
@@ -46,18 +69,48 @@ const Navigation = () => {
                 )}
               >
                 {item.name}
-              </Link>
+              </a>
             ))}
           </div>
 
           {/* Auth Buttons */}
           <div className="hidden md:flex items-center space-x-3">
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/auth">Sign In</Link>
-            </Button>
-            <Button variant="default" size="sm" asChild>
-              <Link to="/auth?signup=true">Sign Up</Link>
-            </Button>
+            {user ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                   <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                    <Avatar className="h-9 w-9">
+                      <AvatarImage src={user.user_metadata.avatar_url} alt={user.email} />
+                      <AvatarFallback>{getInitials(user.email)}</AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56" align="end" forceMount>
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium leading-none">{user.user_metadata.username || user.email}</p>
+                      <p className="text-xs leading-none text-muted-foreground">
+                        {user.email}
+                      </p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleSignOut}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Log out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link to="/auth">Sign In</Link>
+                </Button>
+                <Button variant="default" size="sm" asChild>
+                  <Link to="/auth?signup=true">Sign Up</Link>
+                </Button>
+              </>
+            )}
           </div>
 
           {/* Mobile menu button */}
@@ -78,9 +131,9 @@ const Navigation = () => {
         <div className="md:hidden bg-background border-t border-border">
           <div className="px-2 pt-2 pb-3 space-y-1">
             {navigation.map((item) => (
-              <Link
+              <a
                 key={item.name}
-                to={item.href}
+                href={item.href}
                 className={cn(
                   "block px-3 py-2 text-sm font-medium rounded-lg transition-smooth",
                   isActive(item.href)
@@ -90,15 +143,23 @@ const Navigation = () => {
                 onClick={() => setIsOpen(false)}
               >
                 {item.name}
-              </Link>
+              </a>
             ))}
             <div className="flex flex-col space-y-2 px-3 pt-3">
-              <Button variant="ghost" size="sm" asChild>
-                <Link to="/auth">Sign In</Link>
-              </Button>
-              <Button variant="default" size="sm" asChild>
-                <Link to="/auth?signup=true">Sign Up</Link>
-              </Button>
+              {user ? (
+                 <Button variant="ghost" size="sm" onClick={() => { handleSignOut(); setIsOpen(false); }}>
+                    Sign Out
+                  </Button>
+              ) : (
+                <>
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link to="/auth" onClick={() => setIsOpen(false)}>Sign In</Link>
+                  </Button>
+                  <Button variant="default" size="sm" asChild>
+                    <Link to="/auth?signup=true" onClick={() => setIsOpen(false)}>Sign Up</Link>
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </div>
